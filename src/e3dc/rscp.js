@@ -277,9 +277,6 @@ export const find = (items, tag) =>
 
 const MAGIC = 0xe3dc;
 const CTRL = 0x0011;
-const CTRL_CRC = 0x0010;
-const CTRL_COMPACT = 0x0002;
-const CTRL_VERSION = 0x000f;
 export const FRAME_HEADER = 18;
 const CRC_SIZE = 4;
 
@@ -326,8 +323,9 @@ export function buildFrame(data, nowMs) {
  * Looks for one frame at the start of `buf` (the deciphered bytes received,
  * `length` of them). Returns `{ need: n }` while incomplete (n: the total
  * size the frame needs, when known), `{ data, size }` when complete and
- * checked (`data` a copy). Throws RscpFormatError on another magic, the
- * compact format, another version, or a wrong CRC.
+ * checked (`data` a copy). Throws RscpFormatError on another magic, any
+ * control word but 0x0011 (version 1 with a CRC: never a frame without a
+ * CRC, never the compact format), or a wrong CRC.
  */
 export function readFrame(buf, length = buf.length) {
   if (length < 4) {
@@ -336,24 +334,22 @@ export function readFrame(buf, length = buf.length) {
   if (buf.readUInt16BE(0) !== MAGIC) {
     throw new RscpFormatError('not an RSCP frame');
   }
-  const ctrl = buf.readUInt16BE(2);
-  if (ctrl & CTRL_COMPACT || (ctrl & CTRL_VERSION) !== 0x1) {
+  // Only the form we send and pye3dc reads: version 1 WITH a CRC (the
+  // cipher gives no integrity: the CRC is the only check of the bytes).
+  if (buf.readUInt16BE(2) !== CTRL) {
     throw new RscpFormatError('unknown frame format');
   }
   if (length < FRAME_HEADER) {
     return { need: undefined };
   }
   const dataLength = buf.readUInt16LE(16);
-  const withCrc = (ctrl & CTRL_CRC) !== 0;
-  const size = FRAME_HEADER + dataLength + (withCrc ? CRC_SIZE : 0);
+  const size = FRAME_HEADER + dataLength + CRC_SIZE;
   if (length < size) {
     return { need: size };
   }
-  if (withCrc) {
-    const end = FRAME_HEADER + dataLength;
-    if (crc32(buf, 0, end) !== buf.readUInt32LE(end)) {
-      throw new RscpFormatError('wrong CRC');
-    }
+  const end = FRAME_HEADER + dataLength;
+  if (crc32(buf, 0, end) !== buf.readUInt32LE(end)) {
+    throw new RscpFormatError('wrong CRC');
   }
   return {
     data: Buffer.from(buf.subarray(FRAME_HEADER, FRAME_HEADER + dataLength)),

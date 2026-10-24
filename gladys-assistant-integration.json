@@ -70,8 +70,8 @@
       "required": true,
       "label": { "en": "RSCP password", "fr": "Mot de passe RSCP" },
       "description": {
-        "en": "The RSCP password you set on the display of the system (Main menu, Personalize, User profile, RSCP password), 32 characters at most. Kept by Gladys in its database, never shown again, never sent anywhere: it only protects the frames exchanged with the system.",
-        "fr": "Le mot de passe RSCP que vous avez défini sur l'écran du système (menu principal, Personnaliser, Profil utilisateur, mot de passe RSCP), 32 caractères au plus. Gardé par Gladys dans sa base, jamais réaffiché, jamais envoyé : il protège seulement les trames échangées avec le système."
+        "en": "The RSCP password you set on the display of the system (Main menu, Personalize, User profile, RSCP password), 32 bytes at most, i.e. 32 characters without accents. Kept by Gladys in its database, never shown again, never sent anywhere: it only protects the frames exchanged with the system.",
+        "fr": "Le mot de passe RSCP que vous avez défini sur l'écran du système (menu principal, Personnaliser, Profil utilisateur, mot de passe RSCP), 32 octets au plus, soit 32 caractères sans accent. Gardé par Gladys dans sa base, jamais réaffiché, jamais envoyé : il protège seulement les trames échangées avec le système."
       }
     },
     {
@@ -132,8 +132,8 @@
       "timeout_seconds": 30,
       "label": { "en": "Accept the held index", "fr": "Accepter l'index retenu" },
       "description": {
-        "en": "Only when the status shows a solar production index held back and it is right. First click: lists what is held. Second click (after a few seconds, within 5 min): accepts exactly that. Saving the configuration never accepts anything.",
-        "fr": "Seulement quand l'état affiche un index de production solaire retenu et qu'il est juste. Premier clic : liste ce qui est retenu. Second clic (après quelques secondes, dans les 5 min) : accepte exactement cela. Enregistrer la configuration n'accepte jamais rien."
+        "en": "Only when the status shows a jump of the solar production index held back and it is right. First click: lists what is held. Second click (after a few seconds, within 5 min): accepts exactly that. A drop is never accepted: it corrects itself. Saving the configuration never accepts anything.",
+        "fr": "Seulement quand l'état affiche un saut retenu de l'index de production solaire et qu'il est juste. Premier clic : liste ce qui est retenu. Second clic (après quelques secondes, dans les 5 min) : accepte exactement cela. Une baisse n'est jamais acceptée : elle se corrige seule. Enregistrer la configuration n'accepte jamais rien."
       }
     }
   ]

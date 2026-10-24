@@ -61,6 +61,12 @@ export const RETRY_MAX = 15 * MINUTE;
  * The second time in a row is a refusal (a final stop), never a third try.
  */
 export const LOGIN_LOST_LIMIT = 2;
+/**
+ * The second try after a lost log-in waits at least this long (review r1,
+ * point 4): a system restarting (a software update) may accept and close the
+ * port for a few minutes; two cases within a minute must not stop for good.
+ */
+export const LOGIN_LOST_RETRY = 15 * MINUTE;
 /** The test button answers within this delay. */
 export const TEST_ANSWER_WITHIN = 25 * SECOND;
 /** The second click of "Accept the held index" counts from 3 s to 5 min after the first. */

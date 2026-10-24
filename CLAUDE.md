@@ -91,7 +91,8 @@ scripts/cover.mjs                 the cover, plain Node
 - **Energy monitoring**: the solar production index is the only index
   (`INDEXES` in `src/devices.js`), built by `DailyIndex` and checked by
   `IndexGuard`, both taken as they are: never 0, a jump never confirmed by
-  time, only by the `accept_held_index` action clicked twice. Everything
+  time, only by the `accept_held_index` action clicked twice; a drop of
+  the built index is never accepted (it corrects itself). Everything
   else (house, grid, battery, energies of the day) is a plain sensor: no
   `energy-sensor`, no `daily-consumption`, never `publishEnergyConsumption`.
   Battery and grid powers: one signed plain sensor each (sign unconfirmed).

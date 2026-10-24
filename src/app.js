@@ -43,6 +43,7 @@ import {
   FRESH_INTERVALS,
   INDEX_LIMITS,
   LOGIN_LOST_LIMIT,
+  LOGIN_LOST_RETRY,
   PV_SENSOR_ONLY,
   RETRY_MAX,
   RETRY_MIN,
@@ -384,8 +385,10 @@ export class E3dcApp {
   async publishLast() {
     const generation = this.generation;
     if (!this.isFresh() || this.values.serial !== this.kept.info?.serial) return;
-    const prepared = this.prepare(this.values, { counters: false });
-    await this.saveState();
+    const prepared = this.afterSave(
+      this.prepare(this.values, { counters: false }),
+      await this.saveState(),
+    );
     if (prepared && generation === this.generation) {
       await this.send(prepared);
       if (generation === this.generation) await this.updateStatus();
@@ -401,7 +404,7 @@ export class E3dcApp {
    * a state not loaded yet).
    */
   async saveState({ force = false } = {}) {
-    const indexes = { ...this.kept.indexes };
+    const indexes = Object.assign(Object.create(null), this.kept.indexes);
     for (const [id, guard] of this.guards) {
       indexes[id] = { guard: guard.state(), daily: this.dailies.get(id)?.state() ?? null };
     }
@@ -425,15 +428,30 @@ export class E3dcApp {
     };
     const key = JSON.stringify(state);
     if (!force && key === this.savedKey) {
-      return;
+      return true;
     }
     try {
       await this.store.save(state);
       this.savedKey = key;
       this.savedAttemptAt = attempt;
+      return true;
     } catch (err) {
       this.logger.warn(`Saving the E3/DC state in /data failed (${err?.code ?? 'error'})`);
+      return false;
     }
+  }
+
+  /**
+   * The states to send after a save: without the index when /data could not
+   * be written (review r1, point 7), so Gladys never gets an index /data does
+   * not know; the other values go.
+   */
+  afterSave(states, saved) {
+    if (!states || saved) return states;
+    const external = this.external();
+    const index = new Set(INDEXES.map(({ key }) => external?.feature(key)));
+    const kept = states.filter((s) => !index.has(s.device_feature_external_id));
+    return kept.length > 0 ? kept : undefined;
   }
 
   // --- Reads -------------------------------------------------------------------------
@@ -535,10 +553,10 @@ export class E3dcApp {
     this.values = { ...live, ...day, dayKnown: answer.day !== undefined };
     this.valuesAt = this.monotonic();
     this.readAt = this.now();
-    const prepared = live.serial ? this.prepare(this.values, { counters: true }) : undefined;
-    // Saved BEFORE Gladys gets the values: a crash in between never sends an
-    // index /data does not know.
-    await this.saveState();
+    const states = live.serial ? this.prepare(this.values, { counters: true }) : undefined;
+    // Saved BEFORE Gladys gets the values; the index only goes once /data
+    // holds it (a failed write sends the other values only).
+    const prepared = this.afterSave(states, await this.saveState());
     if (!alive()) return;
     if (prepared) await this.send(prepared);
     if (!alive()) return;
@@ -568,7 +586,8 @@ export class E3dcApp {
         this.kept.lost = null;
       } else {
         this.kept.lost = { count, fp };
-        this.retryAtMono = this.monotonic() + this.retryWait(this.failures);
+        this.retryAtMono =
+          this.monotonic() + Math.max(LOGIN_LOST_RETRY, this.retryWait(this.failures));
         this.failures += 1;
       }
     } else {
@@ -699,7 +718,9 @@ export class E3dcApp {
       const held = guard.held ? `${guard.held.direction}:${guard.held.from}` : undefined;
       if (held && this.loggedHolds.get(id) !== held) {
         this.logger.warn(
-          `E3/DC ${name} index ${guard.held.direction === 'down' ? 'drop' : 'jump'} held back: the "Accept the held index" button takes it`,
+          guard.held.direction === 'down'
+            ? `E3/DC ${name} index drop held back: it corrects itself, never accepted`
+            : `E3/DC ${name} index jump held back: the "Accept the held index" button takes it`,
         );
       }
       if (held) this.loggedHolds.set(id, held);
@@ -808,7 +829,15 @@ export class E3dcApp {
    * (or what may have come since, src/guard.js). A save of the form never accepts.
    */
   async acceptHeldIndex() {
-    const list = this.heldList();
+    // A DROP is never accepted (as gladys-imeon 0.1.2 and gladys-zeversolar):
+    // the built index only drops when the daily index takes back values
+    // already published (a new day undone), or when /data is older than
+    // Gladys; it is never a new meter. Taking it would count the climb back
+    // twice. Held, it corrects itself: only the energy above the last
+    // accepted value is counted.
+    const all = this.heldList();
+    const list = all.filter((h) => h.direction === 'up');
+    const drops = all.filter((h) => h.direction === 'down').map((h) => h.name);
     const mono = this.monotonic();
     const now = this.now();
     const pending = this.pendingAccept;
@@ -816,7 +845,7 @@ export class E3dcApp {
     const elapsed = pending ? mono - pending.at : undefined;
     if (!pending || elapsed > ACCEPT_CONFIRM_WITHIN || elapsed < ACCEPT_CONFIRM_AFTER) {
       if (list.length === 0) {
-        return T.accept.nothing;
+        return drops.length > 0 ? T.accept.drop(drops) : T.accept.nothing;
       }
       this.pendingAccept = { at: mono, listedAt: now, list };
       return T.accept.confirm(list, ACCEPT_CONFIRM_WITHIN);
@@ -829,11 +858,11 @@ export class E3dcApp {
       const margin = guard ? guard.margin(pending.listedAt, now) : 0;
       const same =
         held &&
-        held.direction === entry.direction &&
+        entry.direction === 'up' &&
+        held.direction === 'up' &&
         held.from === entry.from &&
-        (entry.direction === 'up'
-          ? held.to >= entry.to && held.to - entry.to <= margin
-          : Math.abs(held.to - entry.to) <= margin);
+        held.to >= entry.to &&
+        held.to - entry.to <= margin;
       if (same && guard.acceptHeld()) {
         accepted.push({ ...entry, to: held.to });
       } else if (held) {
@@ -841,12 +870,10 @@ export class E3dcApp {
       }
     }
     if (accepted.length === 0 && changed.length === 0) {
-      return T.accept.nothing;
+      return drops.length > 0 ? T.accept.drop(drops) : T.accept.nothing;
     }
-    for (const { name, direction } of accepted) {
-      this.logger.info(
-        `E3/DC ${name} index ${direction === 'down' ? 'drop' : 'jump'} accepted by the user`,
-      );
+    for (const { name } of accepted) {
+      this.logger.info(`E3/DC ${name} index jump accepted by the user`);
     }
     await this.saveState();
     // Published at the next read (never a read sooner than the interval).

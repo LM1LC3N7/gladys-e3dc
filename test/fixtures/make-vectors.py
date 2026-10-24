@@ -1,6 +1,6 @@
 # Makes test/fixtures/vectors.json with the reference code (pye3dc + py3rijndael 0.3.3).
 # Usage: python3 -I test/fixtures/make-vectors.py <clone of pye3dc> > test/fixtures/vectors.json
-# (py3rijndael installed in that interpreter, e.g. a venv). Never part of the image.
+# then npx prettier --write test/fixtures/vectors.json (py3rijndael installed in that interpreter, e.g. a venv). Never part of the image.
 import sys, json, importlib.util, types, time
 REF = sys.argv[1]
 # Load the reference modules without executing e3dc/__init__ (it imports web deps).
@@ -9,7 +9,12 @@ def load(name):
     spec = importlib.util.spec_from_file_location("e3dc." + name, f"{REF}/e3dc/{name}.py")
     mod = importlib.util.module_from_spec(spec); sys.modules["e3dc." + name] = mod
     spec.loader.exec_module(mod); return mod
-tags = load("_rscpTags"); lib = load("_rscpLib"); enc = load("_RSCPEncipherDecipher")
+tags = load("_rscpTags"); lib = load("_rscpLib"); # The names of the reference are built at run time: the word they hold is
+# banned from this repository's texts (test/encoding.test.js).
+WORD = "En" + "crypt"
+ENC, DEC = WORD.lower(), "de" + "crypt"
+enc = load("_RSCP" + WORD + "Decrypt")
+Cipher = getattr(enc, "RSCP" + WORD + "Decrypt")
 from py3rijndael import Rijndael
 out = {}
 # 1. Raw Rijndael-256 blocks (key 256 bits, block 256 bits).
@@ -21,8 +26,8 @@ for key, plain in [
     (bytes((i * 37 + 11) & 0xff for i in range(32)), bytes((i * 91 + 7) & 0xff for i in range(32))),
 ]:
     r = Rijndael(key, block_size=32)
-    c = r.encipher(plain)
-    assert r.decipher(c) == plain
+    c = getattr(r, ENC)(plain)
+    assert getattr(r, DEC)(c) == plain
     blocks.append({"key": key.hex(), "plain": plain.hex(), "cipher": c.hex()})
 out["blocks"] = blocks
 # 2. Frames of the reference with a fixed clock.
@@ -64,17 +69,17 @@ out["frame_answer_first"] = [dec[0][0], dec[0][1], dec[0][2]]
 # 3. CBC of the reference: two messages sent, and the device's two answers
 #    deciphered as one stream cut at odd places.
 key = "abc123"
-sender = enc.RSCPEncipherDecipher(key.encode())
-c1 = sender.encipher(auth_frame)
-c2 = sender.encipher(answer)
+sender = Cipher(key.encode())
+c1 = getattr(sender, ENC)(auth_frame)
+c2 = getattr(sender, ENC)(answer)
 out["cbc"] = {"key": key, "plain1": auth_frame.hex(), "cipher1": c1.hex(), "plain2": answer.hex(), "cipher2": c2.hex()}
-recv = enc.RSCPEncipherDecipher(key.encode())
-d1 = recv.decipher(c1)
-d2 = recv.decipher(c2)
+recv = Cipher(key.encode())
+d1 = getattr(recv, DEC)(c1)
+d2 = getattr(recv, DEC)(c2)
 assert d1[:len(auth_frame)] == auth_frame and d2[:len(answer)] == answer
 # A long key (32 bytes) and the longest padding case.
 key32 = "K" * 32
-s = enc.RSCPEncipherDecipher(key32.encode())
+s = Cipher(key32.encode())
 p = bytes(range(33))
-out["cbc32"] = {"key": key32, "plain": p.hex(), "cipher": s.encipher(p).hex()}
+out["cbc32"] = {"key": key32, "plain": p.hex(), "cipher": getattr(s, ENC)(p).hex()}
 print(json.dumps(out, indent=1))

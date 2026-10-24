@@ -251,7 +251,7 @@ test('the same refused fields saved again are not tried again; the test button t
   assert.equal(client.calls.length, 2);
 });
 
-test('no readable answer to the log-in: tried again once, the second in a row is a final stop', async () => {
+test('no readable answer to the log-in: tried again once 15 min later, the second in a row is a final stop', async () => {
   const { app, gladys, client, tick } = await setup({
     script: () => {
       throw new E3dcError('login_lost');
@@ -259,8 +259,12 @@ test('no readable answer to the log-in: tried again once, the second in a row is
   });
   await app.start(CONFIG);
   await app.idle();
-  assert.match(status(gladys).message.fr, /pas de réponse lisible/);
+  assert.match(status(gladys).message.fr, /pas de réponse lisible.*système en redémarrage/);
+  // The second try waits 15 min (a system restarting must not stop for good).
   await tick(RETRY_MIN);
+  await tick(13 * MINUTE);
+  assert.equal(client.calls.length, 1);
+  await tick(MINUTE + 5 * SECOND);
   assert.equal(client.calls.length, 2);
   assert.match(status(gladys).message.fr, /deux fois de suite.*mot de passe RSCP/);
   for (let i = 0; i < 12; i += 1) await tick(HOUR);
@@ -422,6 +426,143 @@ test('a counter of the day by steps: a step after equal reads is taken, a jump i
   assert.equal(last(gladys, 'pv_energy'), 502);
   assert.equal(counted(gladys).sum, 2);
   assert.match(status(gladys).message.fr, /index de production solaire n’a pas été mis à jour/);
+});
+
+test('a drop of the built index is never accepted: it corrects itself, counted once (E1b)', async () => {
+  // 23:29 in Berlin: the database answers 20 kWh, then 0 by mistake (taken
+  // as the new day), then 0.3 kWh (published: 0.3 kWh counted), then 20.1
+  // kWh 4 min later (the new day undone: the built index drops to 1000.1).
+  const clock = { now: Date.UTC(2026, 9, 24, 21, 29) };
+  let pv = 20000;
+  const { app, gladys, tick } = await setup({
+    clock,
+    devices: [created({ index: { value: 1000, at: clock.now - HOUR } })],
+    script: () => answer({ day: { pv }, live: { pv: 500 } }),
+  });
+  await app.start(CONFIG);
+  await app.idle();
+  pv = 0;
+  await tick(POLL);
+  pv = 300;
+  await tick(POLL);
+  assert.equal(last(gladys, 'pv_energy'), 1000.3);
+  pv = 20100;
+  await tick(4 * MINUTE);
+  assert.equal(last(gladys, 'pv_energy'), 1000.3, 'the drop is held');
+  assert.match(status(gladys).message.fr, /baisse de 1000\.3 à 1000\.1 kWh.*jamais acceptée/);
+  assert.doesNotMatch(status(gladys).message.fr, /cliquez deux fois/);
+  // Two clicks accept nothing.
+  const one = await gladys.fake.action(ACTIONS.ACCEPT_HELD);
+  assert.match(one.data.message.fr, /est une baisse : elle n’est jamais acceptée/);
+  await tick(5 * SECOND);
+  const two = await gladys.fake.action(ACTIONS.ACCEPT_HELD);
+  assert.doesNotMatch(two.data.message.fr, /Accepté/);
+  // The climb back: only the energy above 1000.3 is counted.
+  for (const v of [20200, 20300, 20500]) {
+    pv = v;
+    await tick(POLL);
+  }
+  const { values, sum } = counted(gladys);
+  assert.ok(!values.includes(1000.1), '1000.1 never published');
+  assert.ok(
+    values.every((v, k) => k === 0 || v >= values[k - 1]),
+    'never down',
+  );
+  assert.equal(last(gladys, 'pv_energy'), 1000.5);
+  // 0.3 counted too early, then only 1000.3 -> 1000.5: 0.5 kWh, the real 20 -> 20.5.
+  assert.equal(sum, 0.5);
+});
+
+test('the step cover never widens the daily margin beyond the guard margin', async () => {
+  for (const [power, plateau] of [
+    [500, 5],
+    [8000, 15],
+    [30000, 20],
+    [30000, 40],
+    [0, 30],
+  ]) {
+    let pv = 10000;
+    const { app, gladys, tick } = await setup({
+      devices: [created({ index: { value: 500, at: NOW - MINUTE } })],
+      script: () => answer({ day: { pv }, live: { pv: power } }),
+    });
+    await app.start(CONFIG);
+    await app.idle();
+    const id = F('pv_energy');
+    const daily = app.dailies.get(id);
+    const guard = app.guards.get(id);
+    const seen = [];
+    const read = daily.read.bind(daily);
+    daily.read = (today, at, known, options) => {
+      const s = daily.state();
+      const margin = (daily.limits.maxKw * (at - s.readAt)) / HOUR + daily.limits.slackKwh;
+      seen.push({ margin, guard: guard.margin(guard.last.at, at) });
+      return read(today, at, known, options);
+    };
+    for (let k = 0; k < plateau * 2; k += 1) await tick(POLL);
+    pv = 10000 + 50_000;
+    await tick(POLL);
+    assert.ok(seen.length > 0);
+    for (const { margin, guard: g } of seen) {
+      assert.ok(margin <= g + 1e-9, `${power} W, ${plateau} min: ${margin} > ${g}`);
+    }
+    assert.ok(gladys.fake.states.length > 0);
+  }
+});
+
+test('the days the clocks change (25 h and 23 h): the window, and the index counts the real energy', async () => {
+  for (const [start, span] of [
+    [Date.UTC(2026, 9, 24, 22), 25 * 3600], // 2026-10-25 in Berlin
+    [Date.UTC(2026, 2, 28, 23), 23 * 3600], // 2026-03-29 in Berlin
+  ]) {
+    // Read from 01:00 local; 0.5 kWh per hour all day long, and the next day.
+    const clock = { now: start + HOUR };
+    const end = start + span * 1000;
+    // The counter of the day of the window asked (Wh): 0.5 kWh per hour.
+    const counter = (window, at) => {
+      const from = window.start * 1000;
+      const to = Math.min(at, from === start ? end : at);
+      return Math.max(0, (to - from) / HOUR) * 500;
+    };
+    const { app, gladys, client, tick } = await setup({
+      clock,
+      devices: [created({ index: { value: 100, at: start } })],
+      script: (n, { window }, c) =>
+        answer({ day: { pv: counter(window, c.now) }, live: { pv: 500 } }),
+    });
+    await app.start(CONFIG);
+    await app.idle();
+    assert.equal(client.calls[0].window.span, span);
+    assert.equal(client.calls[0].window.start * 1000, start);
+    // Every 10 min across the end of the day and two hours after.
+    while (clock.now < end + 2 * HOUR) await tick(10 * MINUTE);
+    const { values, sum } = counted(gladys);
+    assert.ok(
+      values.every((v, k) => k === 0 || v >= values[k - 1]),
+      'never down',
+    );
+    // Real: from 01:00 to the end of the day, then two hours: never more,
+    // less by at most the last 10 min before midnight.
+    const produced = (span / 3600 - 1) * 0.5 + 1;
+    assert.ok(sum <= produced + 1e-6, `${sum} > ${produced}`);
+    assert.ok(sum >= produced - 0.1, `${sum} < ${produced} - 0.1`);
+  }
+});
+
+test('/data cannot be written: the index is not sent, the other values are', async () => {
+  const store = createMemoryStore();
+  store.save = async () => {
+    const err = new Error('read-only');
+    err.code = 'EROFS';
+    throw err;
+  };
+  const { app, gladys, logger } = await setup({ store, devices: [created()] });
+  await app.start(CONFIG);
+  await app.idle();
+  assert.equal(last(gladys, 'pv_power'), 4321);
+  assert.equal(last(gladys, 'pv_energy_today'), 12.346);
+  assert.equal(last(gladys, 'pv_energy'), undefined);
+  assert.ok(logger.lines.some((l) => /EROFS/.test(l)));
 });
 
 test('back from "Sensor only": the first value is held, two clicks accept exactly it', async () => {

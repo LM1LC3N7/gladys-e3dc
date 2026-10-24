@@ -70,7 +70,7 @@ test('the CRC is the one of zlib', () => {
   assert.equal(crc32(Buffer.alloc(0)), 0);
 });
 
-test('frames: incomplete waits, another magic, the compact format or a wrong CRC throw', () => {
+test('frames: incomplete waits; another magic, no CRC, the compact format or a wrong CRC throw', () => {
   const frame = Buffer.from(V.frame_answer, 'hex');
   assert.deepEqual(readFrame(frame.subarray(0, 3)), { need: undefined });
   assert.deepEqual(readFrame(frame.subarray(0, 17)), { need: undefined });
@@ -86,6 +86,10 @@ test('frames: incomplete waits, another magic, the compact format or a wrong CRC
   const v2 = Buffer.from(frame);
   v2[3] = 0x12;
   assert.throws(() => readFrame(v2), RscpFormatError);
+  // No CRC (ctrl 0x0001): refused, the CRC is the only check of the bytes.
+  const noCrc = Buffer.from(frame.subarray(0, frame.length - 4));
+  noCrc[3] = 0x01;
+  assert.throws(() => readFrame(noCrc), /unknown frame format/);
   const crc = Buffer.from(frame);
   crc[crc.length - 1] ^= 1;
   assert.throws(() => readFrame(crc), /wrong CRC/);

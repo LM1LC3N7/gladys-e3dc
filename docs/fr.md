@@ -18,7 +18,7 @@ requête qui modifie quoi que ce soit (son code n'en connaît aucune).
 ## Avant de commencer
 
 Sur l'écran du système : **menu principal → Personnaliser → Profil utilisateur
-→ mot de passe RSCP**. Définissez un mot de passe RSCP (32 caractères au plus).
+→ mot de passe RSCP**. Définissez un mot de passe RSCP (32 octets au plus, soit 32 caractères sans accent).
 Il protège les trames échangées sur votre réseau : sans lui, le système ne
 répond pas.
 
@@ -81,10 +81,12 @@ jamais séparée.
   de minuit n'est pas compté (l'état le dit) ; ce que le système produit entre
   la dernière lecture avant minuit et minuit n'est pas compté.
 - Un saut ou une baisse de l'index construit est **retenu** : la dernière
-  valeur acceptée est renvoyée et l'état l'affiche. Si c'est juste, cliquez
-  deux fois sur **Accepter l'index retenu** (le premier clic liste, le second
-  accepte exactement ce qui a été listé). Enregistrer la configuration
-  n'accepte rien.
+  valeur acceptée est renvoyée et l'état l'affiche. Un **saut**, s'il est
+  juste, s'accepte en cliquant deux fois sur **Accepter l'index retenu** (le
+  premier clic liste, le second accepte exactement ce qui a été listé). Une
+  **baisse n'est jamais acceptée** : elle se corrige seule quand l'index
+  repasse au-dessus de la dernière valeur acceptée, et seule l'énergie
+  au-dessus est comptée. Enregistrer la configuration n'accepte rien.
 - **Pas de double comptage** : la consommation de la maison et l'énergie
   prélevée sur le réseau sont déjà comptées par votre compteur principal
   (Linky…) ; l'intégration les affiche comme de simples valeurs, jamais comme
@@ -98,12 +100,15 @@ jamais séparée.
 
 - **Connexion refusée** (identifiant ou mot de passe), ou **pas de réponse
   lisible à la connexion deux fois de suite** (le plus souvent un mauvais mot
-  de passe RSCP) : les lectures **s'arrêtent**, même après un redémarrage,
+  de passe RSCP ; le second essai vient 15 minutes après le premier, pour
+  qu'un système qui redémarre n'arrête pas les lectures) : les lectures
+  **s'arrêtent**, même après un redémarrage,
   jusqu'à ce que vous corrigiez la configuration et l'enregistriez.
   L'intégration ne réessaie jamais seule ; le bouton **Tester la connexion**
   fait un essai par clic (jamais plus vite que l'intervalle).
-- **Injoignable** : nouvel essai après 1 minute, puis 2, 4… jusqu'à
-  15 minutes.
+- **Injoignable** : nouvel essai après l'intervalle de lecture (1 minute au
+  moins), puis après le double, et ainsi de suite jusqu'à 15 minutes (ou
+  l'intervalle, s'il est plus long).
 - **Énergies du jour non lues** : seules elles manquent ; l'état le dit.
 - **Un autre numéro de série à l'adresse** : son propre appareil apparaît dans
   la Découverte ; les valeurs ne vont jamais à l'appareil d'un autre numéro

@@ -23,8 +23,9 @@ the notes of the version's GitHub Release.
   (total and solar), and the energies of the day (solar, battery charge and
   discharge, taken from and sent into the grid, house consumption).
 - The solar production index for the energy monitoring, built from the
-  counter of the day and checked by the guard of gladys-p1-monitor (jumps and
-  drops held until "Accept the held index" is clicked twice); option "Sensor
+  counter of the day and checked by the guard of gladys-p1-monitor (a jump held
+  until "Accept the held index" is clicked twice, a drop never accepted: it
+  corrects itself); option "Sensor
   only" against a double count.
 - A refused log-in (or no readable answer to it twice in a row) stops the
   reads until the form changes, kept in `/data`; one try per click of "Test

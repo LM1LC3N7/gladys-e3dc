@@ -31,8 +31,9 @@ of the day, and a solar production index for the Gladys energy monitoring.
   values decoded in one linear pass with bounded depth and count.
 - The solar production index is built from the counter of the day
   (`src/daily.js`, from gladys-imeon) and checked by the guard of
-  gladys-p1-monitor (`src/guard.js`): never 0, jumps and drops held until the
-  "Accept the held index" button is clicked twice. Battery and grid powers
+  gladys-p1-monitor (`src/guard.js`): never 0, a jump held until the "Accept
+  the held index" button is clicked twice, a drop never accepted (it
+  corrects itself). Battery and grid powers
   are plain signed sensors (their sign is not confirmed); the house
   consumption and the grid energies are plain sensors (the main meter
   already counts them).

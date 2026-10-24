@@ -81,6 +81,8 @@ export function createMemoryStore(initial = {}) {
 const finite = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const FP = /^[0-9a-f]{2}$/;
+/** The external id of an index feature: `ext:<selector>:system:<SERIAL>:<key>`. */
+const INDEX_ID = /^ext:[A-Za-z0-9_.-]{1,64}:system:[A-Z0-9][A-Z0-9-]{2,39}:[a-z0-9_]{1,40}$/;
 
 /** A refusal read back: `{ code, fp }`, a final stop (no end). */
 export function validRefusal(refusal) {
@@ -130,10 +132,11 @@ export function readState(raw, now) {
       : randomBytes(16).toString('hex');
   const address =
     typeof data.address === 'string' && data.address.length <= 300 ? data.address : null;
-  const indexes = {};
+  // No prototype (review r1, point 6), and only the ids of an index feature.
+  const indexes = Object.create(null);
   if (isObject(data.indexes)) {
     for (const [id, state] of Object.entries(data.indexes).slice(0, 20)) {
-      if (typeof id === 'string' && id.length <= 200 && isObject(state)) indexes[id] = state;
+      if (INDEX_ID.test(id) && isObject(state)) indexes[id] = state;
     }
   }
   return {

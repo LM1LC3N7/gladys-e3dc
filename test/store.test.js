@@ -58,3 +58,14 @@ test('read back: odd fields dropped, the time of the last session never in the f
   assert.match(odd.salt, /^[0-9a-f]{32}$/);
   assert.equal(readState(null, NOW).address, null);
 });
+
+test('read back: the indexes have no prototype, only ids of an index feature', () => {
+  const raw = JSON.parse(
+    '{"address":"h:5033","indexes":{"__proto__":{"polluted":1},"x":{},' +
+      '"ext:e3dc:system:S10-123:pv_energy":{"guard":{}}}}',
+  );
+  const s = readState(raw, NOW);
+  assert.equal(Object.getPrototypeOf(s.indexes), null);
+  assert.deepEqual(Object.keys(s.indexes), ['ext:e3dc:system:S10-123:pv_energy']);
+  assert.equal({}.polluted, undefined);
+});

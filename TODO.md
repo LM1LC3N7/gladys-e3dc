@@ -58,8 +58,9 @@
 - **Frames as the reference writes them**: the time of a frame we send is
   written as pye3dc writes it (seconds rounded up, milliseconds in the
   nanoseconds field), byte for byte the frames the systems in the field
-  already take (tested). Only the standard format (version 1) is read; the
-  compact format (protocol 2) is refused (we never ask for it).
+  already take (tested). Only the standard format, version 1 WITH a CRC
+  (control word 0x0011, review r1) is read: no frame without a CRC (the
+  cipher gives no integrity), no compact format (protocol 2).
 - **Bounds**: one answer is at most one frame of the standard format (64 KiB
   of data), kept deciphered in ONE buffer; only zero padding may follow it;
   bytes with no request waiting end the session; 2,000 values and 8 levels of
@@ -94,6 +95,14 @@
   an index, never `energy-sensor`, never `daily-consumption`, never
   `publishEnergyConsumption` (the main meter counts the house; the export is
   never a consumption).
+- **A drop is never accepted** (review r1, as gladys-imeon 0.1.2 and
+  gladys-zeversolar): the built index only drops when the daily index takes
+  back values already published (a new day undone) or when /data is older
+  than Gladys; never a new meter. Held, it corrects itself (only the energy
+  above the last accepted value is counted); the button only accepts jumps.
+  The index is only sent once /data holds it (a failed write sends the other
+  values only). `indexes` in /data: no prototype, only ids of an index
+  feature.
 - **Signed powers**: battery, grid and additional source are each one plain
   signed sensor, as read (their sign is not confirmed on a real system:
   lesson of Zinvolt), never split nor `grid-sensor`.
@@ -112,8 +121,10 @@
 - **Log-in refused (lots 12 and 13)**: access denied or a user level 0: a
   final stop `{ code, fp }` in `/data`, never tried again by itself; no
   readable answer to the log-in (closed, nothing, or bytes that are no frame
-  with our key, the RSCP password most likely) is tried once more, and the
-  second in a row is the same final stop (lot 14, lesson 13). The test button
+  with our key, the RSCP password most likely) is tried once more, at least
+  15 min later (review r1: a system restarting may close the port for a
+  while), and the second in a row is the same final stop (lot 14, lesson
+  13). The test button
   tries once per click when the interval passed; new fields saved are tried
   at once; the stop is erased only by a successful log-in.
 - **Fingerprint (lot 14, lesson 7)**: the RSCP password may be short, so the
@@ -127,8 +138,8 @@
   test answer (tested end to end, and on the wire: no secret in clear). The
   plain log-in frame is wiped once enciphered. Control characters refused in
   the three fields.
-- **Unreachable / odd answers**: 1 min (never faster than a read), doubled up
-  to 15 min. The energies of the day failing only leave them out (status
+- **Unreachable / odd answers**: the interval (1 min at least), doubled up
+  to 15 min (or the interval, if longer). The energies of the day failing only leave them out (status
   note).
 - **States per minute**: a sliding budget of 270 states over 60 s.
 - **No custom identity**: no User-Agent (not HTTP), no imitation of the E3/DC

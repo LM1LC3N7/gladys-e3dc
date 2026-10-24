@@ -18,7 +18,7 @@ anything (none is even known by its code).
 ## Before you start
 
 On the display of the system: **Main menu → Personalize → User profile → RSCP
-password**. Set an RSCP password (32 characters at most). It protects the
+password**. Set an RSCP password (32 bytes at most, i.e. 32 characters without accents). It protects the
 frames exchanged on your network: without it, the system answers nothing.
 
 You also need the **user name and password of your E3/DC account** (the ones
@@ -73,9 +73,12 @@ each is one signed value, as read, never split.
   not counted (the status says so); what the system produces between the last
   read before midnight and midnight is not counted.
 - A jump or a drop of the built index is **held back**: the last accepted
-  value is sent again and the status shows it. If it is right, click
-  **Accept the held index** twice (the first click lists, the second accepts
-  exactly what was listed). Saving the configuration accepts nothing.
+  value is sent again and the status shows it. A **jump**, if it is right,
+  is accepted by clicking **Accept the held index** twice (the first click
+  lists, the second accepts exactly what was listed). A **drop is never
+  accepted**: it corrects itself once the index is back above the last
+  accepted value, and only the energy above that value is counted. Saving
+  the configuration accepts nothing.
 - **No double count**: the house consumption and the energy taken from the
   grid are already counted by your main meter (Linky...); the integration
   shows them as plain values, never as an index. The energy sent into the
@@ -88,11 +91,15 @@ each is one signed value, as read, never split.
 ## Errors and pauses
 
 - **Log-in refused** (user name or password), or **no readable answer to the
-  log-in twice in a row** (most often a wrong RSCP password): the reads
+  log-in twice in a row** (most often a wrong RSCP password; the second try
+  comes 15 minutes after the first, so that a system restarting does not
+  stop the reads): the reads
   **stop**, also after a restart, until you correct the configuration and
   save it. The integration never tries again by itself; the **Test the
   connection** button tries once per click (never faster than the interval).
-- **Unreachable**: tried again after 1 minute, then 2, 4... up to 15 minutes.
+- **Unreachable**: tried again after the reading interval (1 minute at
+  least), then after twice that, and so on, up to 15 minutes (or the
+  interval, if longer).
 - **Energies of the day not read**: only they are left out; the status says
   so.
 - **Another serial number at the address**: its own device appears in

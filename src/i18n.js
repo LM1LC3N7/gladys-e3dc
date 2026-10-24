@@ -28,8 +28,8 @@ const REASON = {
   },
   refused: { en: 'log-in refused', fr: 'connexion refusée' },
   login_lost: {
-    en: 'no readable answer to the log-in',
-    fr: 'pas de réponse lisible à la connexion',
+    en: 'no readable answer to the log-in: a wrong RSCP password, or the system was restarting',
+    fr: 'pas de réponse lisible à la connexion : mauvais mot de passe RSCP, ou système en redémarrage',
   },
   busy: { en: 'a read is already running', fr: 'une lecture est déjà en cours' },
   aborted: { en: 'read stopped', fr: 'lecture arrêtée' },
@@ -51,8 +51,8 @@ const both = (list) => ({ en: sentences('en', list), fr: sentences('fr', list) }
 const heldLine = ({ name, direction, from, to }) =>
   direction === 'down'
     ? {
-        en: `${INDEX[name].en}: dropped from ${kwh(from)} to ${kwh(to)} kWh, held back (the last accepted value is sent again).`,
-        fr: `${INDEX[name].fr} : baisse de ${kwh(from)} à ${kwh(to)} kWh, retenue (la dernière valeur acceptée est renvoyée).`,
+        en: `${INDEX[name].en}: dropped from ${kwh(from)} to ${kwh(to)} kWh, held back (the last accepted value is sent again). A drop is never accepted: it corrects itself once the index is back above ${kwh(from)} kWh, only the energy above it is counted.`,
+        fr: `${INDEX[name].fr} : baisse de ${kwh(from)} à ${kwh(to)} kWh, retenue (la dernière valeur acceptée est renvoyée). Une baisse n’est jamais acceptée : elle se corrige seule quand l’index repasse au-dessus de ${kwh(from)} kWh, seule l’énergie au-dessus est comptée.`,
       }
     : {
         en: `${INDEX[name].en}: jumped from ${kwh(from)} to ${kwh(to)} kWh, held back (not sent to the energy monitoring).`,
@@ -116,8 +116,8 @@ export const T = {
           fr: `${address} refuse la connexion : vérifiez l’identifiant et le mot de passe de votre compte E3/DC, puis enregistrez de nouveau la configuration. Lectures arrêtées d’ici là (le bouton « Tester la connexion » fait un essai).`,
         }
       : {
-          en: `${address} gives no readable answer to the log-in, twice in a row: the RSCP password most likely does not match the one set ${WHERE.en}, or it is not the E3/DC system at this address (check its address in your router). Correct it and save the configuration again. Reads stopped until then (the "Test the connection" button tries once).`,
-          fr: `${address} ne donne pas de réponse lisible à la connexion, deux fois de suite : le mot de passe RSCP ne correspond sans doute pas à celui défini ${WHERE.fr}, ou ce n’est pas le système E3/DC à cette adresse (vérifiez son adresse dans votre box). Corrigez-le puis enregistrez de nouveau la configuration. Lectures arrêtées d’ici là (le bouton « Tester la connexion » fait un essai).`,
+          en: `${address} gives no readable answer to the log-in, twice in a row: the RSCP password most likely does not match the one set ${WHERE.en}, or it is not the E3/DC system at this address (check its address in your router), or the system was restarting. Correct it (or wait for the end of the restart) and save the configuration again. Reads stopped until then (the "Test the connection" button tries once).`,
+          fr: `${address} ne donne pas de réponse lisible à la connexion, deux fois de suite : le mot de passe RSCP ne correspond sans doute pas à celui défini ${WHERE.fr}, ou ce n’est pas le système E3/DC à cette adresse (vérifiez son adresse dans votre box), ou le système redémarrait. Corrigez-le (ou attendez la fin du redémarrage) puis enregistrez de nouveau la configuration. Lectures arrêtées d’ici là (le bouton « Tester la connexion » fait un essai).`,
         },
   failing: (address, err, wait) => ({
     en: `${address} could not be read (${reason(err).en}): new try in ${delay(wait).en}.`,
@@ -155,10 +155,14 @@ export const T = {
     held: (held) =>
       both([
         ...held.map(heldLine),
-        {
-          en: 'If it is right, click "Accept the held index" twice in the configuration of the integration (the first click lists, the second accepts exactly what was listed). Saving the configuration accepts nothing.',
-          fr: 'Si c’est juste, cliquez deux fois sur « Accepter l’index retenu » dans la configuration de l’intégration (le premier clic liste, le second accepte exactement ce qui a été listé). Enregistrer la configuration n’accepte rien.',
-        },
+        ...(held.some((h) => h.direction === 'up')
+          ? [
+              {
+                en: 'If a jump is right, click "Accept the held index" twice in the configuration of the integration (the first click lists, the second accepts exactly what was listed). Saving the configuration accepts nothing.',
+                fr: 'Si un saut est juste, cliquez deux fois sur « Accepter l’index retenu » dans la configuration de l’intégration (le premier clic liste, le second accepte exactement ce qui a été listé). Enregistrer la configuration n’accepte rien.',
+              },
+            ]
+          : []),
       ]),
   },
   accept: {
@@ -166,23 +170,21 @@ export const T = {
       en: 'No index is held back: nothing to accept.',
       fr: 'Aucun index n’est retenu : rien à accepter.',
     },
+    /** Only drops held: never accepted (as gladys-imeon 0.1.2), they correct themselves. */
+    drop: (names) => ({
+      en: `The index held back (${names.map((n) => INDEX[n].en).join(', ')}) is a drop: it is never accepted, it corrects itself once the index is back above the last accepted value. Nothing to accept.`,
+      fr: `L’index retenu (${names.map((n) => INDEX[n].fr).join(', ')}) est une baisse : elle n’est jamais acceptée, l’index se corrige seul quand il repasse au-dessus de la dernière valeur acceptée. Rien à accepter.`,
+    }),
     confirm: (held, within) =>
       both([
         {
           en: 'A second click accepts exactly these values:',
           fr: 'Un second clic accepte exactement ces valeurs :',
         },
-        ...held.map((h) =>
-          h.direction === 'down'
-            ? {
-                en: `${INDEX[h.name].en}: ${kwh(h.from)} → ${kwh(h.to)} kWh (a drop: 0 kWh counted).`,
-                fr: `${INDEX[h.name].fr} : ${kwh(h.from)} → ${kwh(h.to)} kWh (une baisse : 0 kWh compté).`,
-              }
-            : {
-                en: `${INDEX[h.name].en}: ${kwh(h.from)} → ${kwh(h.to)} kWh (${kwh(h.to - h.from)} kWh counted at once).`,
-                fr: `${INDEX[h.name].fr} : ${kwh(h.from)} → ${kwh(h.to)} kWh (${kwh(h.to - h.from)} kWh comptés d’un coup).`,
-              },
-        ),
+        ...held.map((h) => ({
+          en: `${INDEX[h.name].en}: ${kwh(h.from)} → ${kwh(h.to)} kWh (${kwh(h.to - h.from)} kWh counted at once).`,
+          fr: `${INDEX[h.name].fr} : ${kwh(h.from)} → ${kwh(h.to)} kWh (${kwh(h.to - h.from)} kWh comptés d’un coup).`,
+        })),
         {
           en: `Click "Accept the held index" again, after a few seconds and within ${delay(within).en}, to accept them; accept only if this energy was real.`,
           fr: `Cliquez de nouveau sur « Accepter l’index retenu », après quelques secondes et dans les ${delay(within).fr}, pour les accepter ; n’acceptez que si cette énergie est réelle.`,
