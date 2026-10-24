@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-24
+
 ### Added
 
 - Local reading of an E3/DC home storage system (S10, Quattroporte) through
@@ -30,3 +32,6 @@ the notes of the version's GitHub Release.
 - A refused log-in (or no readable answer to it twice in a row) stops the
   reads until the form changes, kept in `/data`; one try per click of "Test
   the connection".
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-e3dc/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-e3dc/releases/tag/v0.1.1
