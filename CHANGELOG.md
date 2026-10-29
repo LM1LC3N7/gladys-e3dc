@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-29
+
 ### Fixed
 
 - The counter guard keeps an accepted jump as a floor: a reading back under
@@ -39,5 +41,6 @@ the notes of the version's GitHub Release.
   reads until the form changes, kept in `/data`; one try per click of "Test
   the connection".
 
-[Unreleased]: https://github.com/LM1LC3N7/gladys-e3dc/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/LM1LC3N7/gladys-e3dc/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/LM1LC3N7/gladys-e3dc/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/LM1LC3N7/gladys-e3dc/releases/tag/v0.1.1

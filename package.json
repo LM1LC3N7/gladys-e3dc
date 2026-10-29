@@ -1,6 +1,6 @@
 {
   "name": "gladys-e3dc",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "E3/DC home storage (S10, Quattroporte) for Gladys Assistant: state of charge, powers, solar, grid, wallbox, the energies of the day and a solar production index, read locally through RSCP. Read-only.",
   "type": "module",
